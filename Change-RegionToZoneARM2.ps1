@@ -237,10 +237,14 @@ If (!($SkipAZCheck)){
     writelog "  - Retrieving information on Availability Zone presence and SKU availablity in requested zone this takes a while" -logFile $logFile
     $EligableForMigration=Get-AzComputeResourceSku | where {$_.Locations.Contains($VMObject.location) -and $_.Name.contains($vmObject.HardwareProfile.VMsize) -and $_.LocationInfo.zones.contains($TargetZone.toString())}
 
-    If (!($EligableForMigration)){
+    If ($VMAvailabilityZones -notcontains $TargetZone){
         writelog "VMSize not available in AZ or no AZ found in VM location" -logFile $logFile -Color Red    
         exit
     }
+    #If (!($EligableForMigration)){
+    #    writelog "VMSize not available in AZ or no AZ found in VM location" -logFile $logFile -Color Red    
+    #    exit
+    #}
 }
 
 
