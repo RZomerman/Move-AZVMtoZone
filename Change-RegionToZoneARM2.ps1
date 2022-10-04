@@ -54,10 +54,10 @@ Function ConvertDisktoZonal ($DiskID){
         $DiskGeneration="V1"
     }
 
-
     writelog ("   >Snapshot ID: " + $DiskSnapshotID) -LogFile $LogFile
     writelog ("   >Disk Location: " + $DiskResourceLocation) -LogFile $LogFile
     writelog ("   >Disk SKU: " + $SKU) -LogFile $LogFile
+    writelog ("   >Disk Tier: " + $Tier) -LogFile $LogFile
     writelog ("   >Disk Tier: " + $Tier) -LogFile $LogFile
 
     #Scanning and converting tags for disk object
@@ -185,6 +185,10 @@ for ($s=1;$s -le $NICObject.IpConfigurations.publicIPAddress.id.count ; $s++ ){
 write-host ""
 write-host ""
 Set-Item -Path Env:\SuppressAzurePowerShellBreakingChangeWarnings -Value $true
+
+#We already updated the code with zonal IP addresses, disk hyper-V generation and trusted launch config for VM's
+$supress=Update-AzConfig -DisplayBreakingChangeWarning $false
+
 #Cosmetic stuff
 write-host ""
 write-host ""
@@ -241,17 +245,13 @@ If (!($vmObject)) {
 #Validating if VM can be moved to Availablity Zone (supported by location and SKU)
 If (!($SkipAZCheck)){
     writelog "  - Retrieving information on Availability Zone presence and SKU availablity in requested zone this takes a while" -logFile $logFile
-    writelog ("    scanning for VM SKU: " + $vmObject.HardwareProfile.VMsize) -logFile $logFile
-    $EligableForMigration=Get-AzComputeResourceSku | where {$_.Locations.Contains($VMObject.location) -and $_.Name.contains($vmObject.HardwareProfile.VMsize) -and $_.LocationInfo.zones.contains($TargetZone.toString())}
+    writelog ("    scanning for VM SKU: " + $vmObject.HardwareProfile.VMsize + " in zone: " + $TargetZone) -logFile $logFile
+    $EligableForMigration=Get-AzComputeResourceSku | where {($_.locations).ToUpper().contains($vmobject.Location.ToUpper()) -and $_.Name.contains($vmObject.HardwareProfile.VMsize) -and $_.LocationInfo.zones.contains($TargetZone.toString())}
 
-    If ($VMAvailabilityZones -notcontains $TargetZone){
+    If (!($EligableForMigration)){
         writelog "VMSize not available in AZ or no AZ found in VM location" -logFile $logFile -Color Red    
         exit
     }
-    #If (!($EligableForMigration)){
-    #    writelog "VMSize not available in AZ or no AZ found in VM location" -logFile $logFile -Color Red    
-    #    exit
-    #}
 }
 
 
