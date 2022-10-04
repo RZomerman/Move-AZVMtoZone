@@ -235,6 +235,7 @@ If (!($vmObject)) {
 #Validating if VM can be moved to Availablity Zone (supported by location and SKU)
 If (!($SkipAZCheck)){
     writelog "  - Retrieving information on Availability Zone presence and SKU availablity in requested zone this takes a while" -logFile $logFile
+    writelog ("    scanning for VM SKU: " + $vmObject.HardwareProfile.VMsize) -logFile $logFile
     $EligableForMigration=Get-AzComputeResourceSku | where {$_.Locations.Contains($VMObject.location) -and $_.Name.contains($vmObject.HardwareProfile.VMsize) -and $_.LocationInfo.zones.contains($TargetZone.toString())}
 
     If ($VMAvailabilityZones -notcontains $TargetZone){
@@ -289,6 +290,28 @@ $null=Update-AzVM -VM $VMObject -ResourceGroupName $VMObject.ResourceGroupName
     $Command = {Export-AzResourceGroup -ResourceGroupName $ResourceGroup -Resource $vmObject.id -IncludeParameterDefaultValue -IncludeComments -Force -Path $VMExportFile }
     RunLog-Command -Description $Description -Command $Command -LogFile $LogFile -Color "Green"
 
+#Creating emergency restore file based on this one
+    $EmergencyObject=Get-Content $VMExportFile | ConvertFrom-Json
+    If ($EmergencyObject.resources.properties.osProfile){
+        $EmergencyObject.resources.properties.osProfile= $null
+    }
+    If ($EmergencyObject.resources.properties.storageprofile.imageReference){
+        $EmergencyObject.resources.properties.storageprofile.imageReference=$null
+    }
+    $EmergencyObject.resources.properties.storageProfile.osdisk.createOption="attach"
+    
+    If ($EmergencyObject.resources.properties.storageProfile.Count -gt 0) {
+        for ($s=1;$s -le $EmergencyObject.resources.properties.storageProfile.Count ; $s++ ){
+            $EmergencyObject.resources.properties.storageProfile.DataDisks[$s-1].CreateOption = 'Attach'
+            writelog "   >Setting disks to attach for emergency restore" -LogFile $LogFile
+        }
+    }
+    $Description = "  - Creating the VM Emergency restore file : EmergencyRestore-$ResourceGroup-$VMName.json "
+    $EFilename=($workfolder + "/EmergencyRestore-" + $ResourceGroup + "-" + $VMName + ".json")
+    $Command = { $EmergencyObject | ConvertTo-Json -Depth 10 | Out-File $EFilename }
+    RunLog-Command -Description $Description -Command $Command -LogFile $LogFile -Color "Green"
+    writelog "  - in order to restore the previous VM run:" -LogFile $LogFile -Color Yellow
+    writelog "     New-AzResourceGroupDeployment -ResourceGroupName $ResourceGroup -templatefile $EFilename"  -LogFile $LogFile -Color Yellow
 
 #Shutting down VM to ensure data integrity
 writelog "  - Stopping VM for data integrity" -logFile $logFile -Color Green
@@ -331,7 +354,7 @@ If ($VmObject.StorageProfile.DataDisks.Count -gt 0) {
             $DataDiskID=ConvertDisktoZonal -DiskID $VmObject.StorageProfile.DataDisks[$s-1].ManagedDisk.Id
             $Datadiskid=$Datadiskid | where {$_ -match "/subsc"}
             $VmObject.StorageProfile.DataDisks[$s-1].ManagedDisk.Id = $DataDiskID
-            $VmObject.StorageProfile.DataDisks[$s-1].Name=($VmObject.StorageProfile.DataDisks[$s-1].Name + "zone")
+            $VmObject.StorageProfile.DataDisks[$s-1].Name=($VmObject.StorageProfile.DataDisks[$s-1].Name + "z")
             writelog "  - Converted Data Disk $s and mounted new disk"  -LogFile $LogFile -Color Green
         }
     }
@@ -347,7 +370,7 @@ writelog "  - Setting deployment options" -logFile $logFile -Color Green
         $VmObject.StorageProfile.OsDisk.Image = $null
     }
 
-    If ($VmObject.StorageProfile.DataDisks.Count -gt 1) {
+    If ($VmObject.StorageProfile.DataDisks.Count -gt 0) {
         for ($s=1;$s -le $VmObject.StorageProfile.DataDisks.Count ; $s++ ){
             $VmObject.StorageProfile.DataDisks[$s-1].CreateOption = 'Attach'
             writelog "   >Setting disks to attach" -LogFile $LogFile
