@@ -214,7 +214,7 @@ Import-Module .\Change-RegionToZone.psm1 -DisableNameChecking
 $ErrorActionPreference = "Stop"
 $date = Get-Date -UFormat "%Y-%m-%d-%H-%M"
 $workfolder = Split-Path $script:MyInvocation.MyCommand.Path
-$logFile = $workfolder+'\ChangeSize'+$date+'.log'
+$logFile = $workfolder+'/ChangeZone'+$date+'.log'
 Write-Output "  - Steps will be tracked in log file : [ $logFile ]" 
 
 ##Login to Azure##
@@ -266,7 +266,7 @@ $null=Update-AzVM -VM $VMObject -ResourceGroupName $VMObject.ResourceGroupName
     Write-host "if so, please run new-AzResourceGroupDeployment -Name <deploymentName> -ResourceGroup <ResourceGroup> -TemplateFile .\<filename>" -ForegroundColor Yellow
     write-host ""
     $Filename=($ResourceGroup + "-" + $VMName)
-    $Command = {ConvertTo-Json -InputObject $vmObject -Depth 100 | Out-File -FilePath $workfolder'\'$Filename'-Object.json'}
+    $Command = {ConvertTo-Json -InputObject $vmObject -Depth 100 | Out-File -FilePath $workfolder'/'$Filename'-Object.json'}
     RunLog-Command -Description $Description -Command $Command -LogFile $LogFile -Color "Green"
 
     $VMBackupObject=$VMObject
@@ -278,13 +278,14 @@ $null=Update-AzVM -VM $VMObject -ResourceGroupName $VMObject.ResourceGroupName
     }
     $VMBackupObject.OSProfile = $null
     $VMBackupObject.StorageProfile.ImageReference = $null
-    $Description = "  - Creating the VM Emergency restore file : EmergencyRestore-$ResourceGroup-$VMName.json "
-    $Command = {ConvertTo-Json -InputObject $VMBackupObject -Depth 100 | Out-File -FilePath 'EmergencyRestore-'$workfolder'\'$ResourceGroup-$VMName'.json'}
-    RunLog-Command -Description $Description -Command $Command -LogFile $LogFile -Color "Green"
+    #$Description = "  - Creating the VM Emergency restore file : EmergencyRestore-$ResourceGroup-$VMName.json "
+    #$EFilename=($workfolder + "/EmergencyRestore-" + $ResourceGroup + "-" + $VMName + ".json")
+    #$Command = { Export-AzResourceGroup -ResourceGroupName $ResourceGroup -Resource $vmObject.id -Path $EFilename}
+    #RunLog-Command -Description $Description -Command $Command -LogFile $LogFile -Color "Green"
 
 #Exporting object file to be reimported later and for adjustments if required prior to deployment
-    [string]$VMExportFile=($workfolder + '\' + $ResourceGroup + '-' + $VMName + '.json')
-    $Description = "  - Exporting the VM JSON Deployment file: $VMExportFile "
+    [string]$VMExportFile=($workfolder + '/' + $ResourceGroup + '-' + $VMName + '.json')
+    $Description = "  - Exporting the VM JSON Deployment file - this file can be used as emergency restore file: $VMExportFile "
     $Command = {Export-AzResourceGroup -ResourceGroupName $ResourceGroup -Resource $vmObject.id -IncludeParameterDefaultValue -IncludeComments -Force -Path $VMExportFile }
     RunLog-Command -Description $Description -Command $Command -LogFile $LogFile -Color "Green"
 
@@ -321,16 +322,14 @@ if (!($VmObject.StorageProfile.OsDisk.VHD)) {
 }
 
 #Converting all data disks
-If ($VmObject.StorageProfile.DataDisks.Count -gt 1) {
+If ($VmObject.StorageProfile.DataDisks.Count -gt 0) {
     writelog "  - Retrieving Data Disk(s) information" -logFile $logFile -Color Green
     for ($s=1;$s -le $VmObject.StorageProfile.DataDisks.Count ; $s++ ){
         $VmObject.StorageProfile.DataDisks[$s-1].CreateOption = 'Attach'
         if (!($VmObject.StorageProfile.DataDisks[$s-1].vhd)){
             writelog ("   >Converting Data Disk to Zonal: " + $VmObject.StorageProfile.DataDisks[$s-1].Name)  -LogFile $LogFile
             $DataDiskID=ConvertDisktoZonal -DiskID $VmObject.StorageProfile.DataDisks[$s-1].ManagedDisk.Id
-            if ($DataDiskID -contains " ") {
-                $DataDiskID=$DataDiskID.replace(" ","")
-            }
+            $Datadiskid=$Datadiskid | where {$_ -match "/subsc"}
             $VmObject.StorageProfile.DataDisks[$s-1].ManagedDisk.Id = $DataDiskID
             $VmObject.StorageProfile.DataDisks[$s-1].Name=($VmObject.StorageProfile.DataDisks[$s-1].Name + "zone")
             writelog "  - Converted Data Disk $s and mounted new disk"  -LogFile $LogFile -Color Green
@@ -387,5 +386,5 @@ writelog "  - Setting deployment options" -logFile $logFile -Color Green
     Start-sleep 5
     
     $Description = "   -Recreating the Azure VM: (Step 2 : Creating the VM...) "
-    $Command = {New-AZVM -ResourceGroupName $VmObject.ResourceGroupName -Location $VmObject.Location -VM $VmObject | Out-Null}
+    $Command = {New-AZVM -ResourceGroupName $VmObject.ResourceGroupName -Location $VmObject.Location -VM $VmObject}
     RunLog-Command -Description $Description -Command $Command -LogFile $LogFile
