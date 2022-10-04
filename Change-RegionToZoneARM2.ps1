@@ -48,6 +48,12 @@ Function ConvertDisktoZonal ($DiskID){
     $DiskResourceLocation=$DiskResource.Location
     $SKU=$Disk.sku.name
     $Tier=$Disk.sku.tier
+    If ($disk.HyperVGeneration) {
+        $DiskGeneration=$disk.HyperVGeneration
+    }else{
+        $DiskGeneration="V1"
+    }
+
 
     writelog ("   >Snapshot ID: " + $DiskSnapshotID) -LogFile $LogFile
     writelog ("   >Disk Location: " + $DiskResourceLocation) -LogFile $LogFile
@@ -74,11 +80,11 @@ Function ConvertDisktoZonal ($DiskID){
         
         #Creating new Disk Configuration with TAGS and Zone information
         writelog "Creating new disk configuration with tags" -LogFile $LogFile
-        $DiskConfig=New-AzDiskConfig -Zone $TargetZone -SkuName $SKU -Location $DiskResourceLocation -CreateOption Copy -SourceResourceId $DiskSnapshotID -tag $newtag 
+        $DiskConfig=New-AzDiskConfig -Zone $TargetZone -SkuName $SKU -Location $DiskResourceLocation -CreateOption Copy -SourceResourceId $DiskSnapshotID -tag $newtag -HyperVGeneration $DiskGeneration
     }else{
         #Creating new Disk Configuration with Zone information
         writelog "  - Creating new disk configuration" -LogFile $LogFile -Color Green
-        $DiskConfig=New-AzDiskConfig -Zone $TargetZone -SkuName $SKU -Location $DiskResourceLocation -CreateOption Copy -SourceResourceId $DiskSnapshotID
+        $DiskConfig=New-AzDiskConfig -Zone $TargetZone -SkuName $SKU -Location $DiskResourceLocation -CreateOption Copy -SourceResourceId $DiskSnapshotID -HyperVGeneration $DiskGeneration
     }
     
     #Create the disk from the snapshot
@@ -405,9 +411,21 @@ writelog "  - Setting deployment options" -logFile $logFile -Color Green
     $Command = {Remove-AzVM -Name $VmObject.Name -ResourceGroupName $VmObject.ResourceGroupName -Force | Out-null}
     RunLog-Command -Description $Description -Command $Command -LogFile $LogFile
     
+
+    $Description = "  - Creating the VM template file : ZoneTemplate-$ResourceGroup-$VMName.json "
+    $EFilename=($workfolder + "/ZoneTemplate-" + $ResourceGroup + "-" + $VMName + ".json")
+    $Command = { $VmObject | ConvertTo-Json -Depth 10 | Out-File $EFilename }
+    RunLog-Command -Description $Description -Command $Command -LogFile $LogFile -Color "Green"
+    writelog "  - in order to deploy the VM (if failed):" -LogFile $LogFile -Color Yellow
+    writelog "     New-AzResourceGroupDeployment -ResourceGroupName $ResourceGroup -templatefile $EFilename"  -LogFile $LogFile -Color Yellow
+
+
+
     #Write-host "  -Waiting for 5 seconds to backend to sync" -ForegroundColor Yellow
     Start-sleep 5
     
+
+
     $Description = "   -Recreating the Azure VM: (Step 2 : Creating the VM...) "
     $Command = {New-AZVM -ResourceGroupName $VmObject.ResourceGroupName -Location $VmObject.Location -VM $VmObject}
     RunLog-Command -Description $Description -Command $Command -LogFile $LogFile
