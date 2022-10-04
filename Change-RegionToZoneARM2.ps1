@@ -328,7 +328,9 @@ If ($VmObject.StorageProfile.DataDisks.Count -gt 1) {
         if (!($VmObject.StorageProfile.DataDisks[$s-1].vhd)){
             writelog ("   >Converting Data Disk to Zonal: " + $VmObject.StorageProfile.DataDisks[$s-1].Name)  -LogFile $LogFile
             $DataDiskID=ConvertDisktoZonal -DiskID $VmObject.StorageProfile.DataDisks[$s-1].ManagedDisk.Id
-            $DataDiskID=$DataDiskID=.replace(" ","")
+            if ($DataDiskID -contains " ") {
+                $DataDiskID=$DataDiskID.replace(" ","")
+            }
             $VmObject.StorageProfile.DataDisks[$s-1].ManagedDisk.Id = $DataDiskID
             $VmObject.StorageProfile.DataDisks[$s-1].Name=($VmObject.StorageProfile.DataDisks[$s-1].Name + "zone")
             writelog "  - Converted Data Disk $s and mounted new disk"  -LogFile $LogFile -Color Green
