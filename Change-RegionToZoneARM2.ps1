@@ -256,11 +256,15 @@ If (!($SkipAZCheck)){
 
 
 #Ensuring we retain the disks on deletion - this is required, else the disks might be deleted with the VM on the last step
-$vmObject.StorageProfile.OsDisk.DeleteOption="detach"
+If ($vmObject.StorageProfile.OsDisk.DeleteOption) {
+    $vmObject.StorageProfile.OsDisk.DeleteOption="detach"
+}
 
 for ($s=1;$s -le $VmObject.StorageProfile.DataDisks.Count ; $s++ ){
     if (!($VmObject.StorageProfile.DataDisks[$s-1].vhd)){
-        $VmObject.StorageProfile.DataDisks[$s-1].DeleteOption="Detach"
+        If ($VmObject.StorageProfile.DataDisks[$s-1].DeleteOption) {
+            $VmObject.StorageProfile.DataDisks[$s-1].DeleteOption="Detach"
+        }
     }
 }
 writelog "  - Changing VM/Disk deletion mode to detach to retain old disks" -logFile $logFile -Color Green
